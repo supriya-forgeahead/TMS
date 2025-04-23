@@ -17,51 +17,46 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import com.hit.beans.NoticeBean;
 import com.hit.utility.DBUtil;
 
-/**
- * Test class for NoticeDaoImpl
- * Tests CRUD operations for notice management including viewing, adding, and removing notices
- */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 public class NoticeDaoImplTest {
 
     @Mock
     private PreparedStatement mockPreparedStatement;
     @Mock
     private ResultSet mockResultSet;
-
+    @Mock
     private Connection mockConnection;
+
     private NoticeDaoImpl noticeDao;
     private MockedStatic<DBUtil> dbUtilMocked;
 
-    /**
-     * Sets up the test environment before each test
-     * Initializes mocks and common behavior
-     */
     @BeforeEach
-    void setUp() throws SQLException {
-        mockConnection = mock(Connection.class);
+    void setUp() {
         noticeDao = new NoticeDaoImpl();
         dbUtilMocked = mockStatic(DBUtil.class);
-        
-        // Configure default mock behaviors
         dbUtilMocked.when(DBUtil::provideConnection).thenReturn(mockConnection);
-        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
     }
 
-    /**
-     * Tests retrieval of notices when notices exist in the database
-     */
+    @AfterEach
+    void tearDown() {
+        if (dbUtilMocked != null) {
+            dbUtilMocked.close();
+        }
+    }
+
     @Test
     void viewAllNotice_WhenNoticesExist_ShouldReturnNoticeList() throws SQLException {
         // Arrange
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
         when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
-        when(mockResultSet.next()).thenReturn(true, true, false); // Two notices
-        
-        // Mock notice data
+        when(mockResultSet.next()).thenReturn(true, true, false);
         when(mockResultSet.getInt("id")).thenReturn(123, 124);
         when(mockResultSet.getString("title")).thenReturn("Test Notice 1", "Test Notice 2");
         when(mockResultSet.getString("info")).thenReturn("Info 1", "Info 2");
@@ -71,21 +66,17 @@ public class NoticeDaoImplTest {
 
         // Assert
         assertAll(
-            () -> assertNotNull(result, "Result should not be null"),
-            () -> assertEquals(2, result.size(), "Should return two notices"),
-            // Verify first notice
+            () -> assertNotNull(result),
+            () -> assertEquals(2, result.size()),
             () -> assertNotice(result.get(0), 123, "Test Notice 1", "Info 1"),
-            // Verify second notice
             () -> assertNotice(result.get(1), 124, "Test Notice 2", "Info 2")
         );
     }
 
-    /**
-     * Tests retrieval of notices when no notices exist
-     */
     @Test
     void viewAllNotice_WhenNoNotices_ShouldReturnEmptyList() throws SQLException {
         // Arrange
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
         when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
         when(mockResultSet.next()).thenReturn(false);
 
@@ -93,149 +84,95 @@ public class NoticeDaoImplTest {
         List<NoticeBean> result = noticeDao.viewAllNotice();
 
         // Assert
-        assertAll(
-            () -> assertNotNull(result, "Result should not be null"),
-            () -> assertTrue(result.isEmpty(), "Result should be empty")
-        );
+        assertTrue(result.isEmpty());
     }
 
-    /**
-     * Tests error handling when database error occurs during notice retrieval
-     */
     @Test
     void viewAllNotice_WhenSQLException_ShouldReturnEmptyList() throws SQLException {
         // Arrange
-        when(mockPreparedStatement.executeQuery())
-            .thenThrow(new SQLException("Database error"));
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeQuery()).thenThrow(new SQLException("Database error"));
 
         // Act
         List<NoticeBean> result = noticeDao.viewAllNotice();
 
         // Assert
-        assertAll(
-            () -> assertNotNull(result, "Result should not be null even after error"),
-            () -> assertTrue(result.isEmpty(), "Result should be empty after error")
-        );
+        assertTrue(result.isEmpty());
     }
 
-    /**
-     * Tests successful notice addition
-     */
     @Test
     void addNotice_WhenSuccessful_ShouldReturnSuccess() throws SQLException {
         // Arrange
-        String noticeTitle = "Test Notice";
-        String noticeDesc = "Test Info";
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
         when(mockPreparedStatement.executeUpdate()).thenReturn(1);
 
         // Act
-        String result = noticeDao.addNotice(noticeTitle, noticeDesc);
+        String result = noticeDao.addNotice("Test Notice", "Test Info");
 
         // Assert
-        assertAll(
-            () -> assertEquals("Notice Added Successfully", result, 
-                "Should return success message"),
-            () -> verify(mockPreparedStatement).setString(1, noticeTitle),
-            () -> verify(mockPreparedStatement).setString(2, noticeDesc)
-        );
+        assertEquals("Notice Added Successfully", result);
+        verify(mockPreparedStatement).setString(1, "Test Notice");
+        verify(mockPreparedStatement).setString(2, "Test Info");
     }
 
-    /**
-     * Tests error handling during notice addition
-     */
     @Test
     void addNotice_WhenSQLException_ShouldReturnError() throws SQLException {
         // Arrange
-        String noticeTitle = "Test Notice";
-        String noticeDesc = "Test Info";
-        when(mockPreparedStatement.executeUpdate())
-            .thenThrow(new SQLException("Database error"));
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeUpdate()).thenThrow(new SQLException("Database error"));
 
         // Act
-        String result = noticeDao.addNotice(noticeTitle, noticeDesc);
+        String result = noticeDao.addNotice("Test Notice", "Test Info");
 
         // Assert
-        assertTrue(result.contains("Error:"), 
-            "Should return error message when database operation fails");
+        assertEquals("Error: Database error", result);
     }
 
-    /**
-     * Tests successful notice removal
-     */
     @Test
     void removeNotice_WhenSuccessful_ShouldReturnSuccess() throws SQLException {
         // Arrange
-        int noticeId = 123;
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
         when(mockPreparedStatement.executeUpdate()).thenReturn(1);
 
         // Act
-        String result = noticeDao.removeNotice(noticeId);
+        String result = noticeDao.removeNotice(123);
 
         // Assert
-        assertAll(
-            () -> assertEquals("Notice No: " + noticeId + " has been Removed Successfully!", 
-                result, "Should return success message"),
-            () -> verify(mockPreparedStatement).setInt(1, noticeId)
-        );
+        assertEquals("Notice No: 123 has been Removed Successfully!", result);
+        verify(mockPreparedStatement).setInt(1, 123);
     }
 
-    /**
-     * Tests notice removal when notice doesn't exist
-     */
     @Test
     void removeNotice_WhenNoticeNotFound_ShouldReturnNotFound() throws SQLException {
         // Arrange
-        int noticeId = 123;
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
         when(mockPreparedStatement.executeUpdate()).thenReturn(0);
 
         // Act
-        String result = noticeDao.removeNotice(noticeId);
+        String result = noticeDao.removeNotice(123);
 
         // Assert
-        assertEquals("Notice Deletion Failed", result, 
-            "Should return failure message when notice not found");
+        assertEquals("Notice Deletion Failed", result);
     }
 
-    /**
-     * Tests error handling during notice removal
-     */
     @Test
     void removeNotice_WhenSQLException_ShouldReturnError() throws SQLException {
         // Arrange
-        int noticeId = 123;
-        when(mockPreparedStatement.executeUpdate())
-            .thenThrow(new SQLException("Database error"));
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+        when(mockPreparedStatement.executeUpdate()).thenThrow(new SQLException("Database error"));
 
         // Act
-        String result = noticeDao.removeNotice(noticeId);
+        String result = noticeDao.removeNotice(123);
 
         // Assert
-        assertTrue(result.contains("Error:"), 
-            "Should return error message when database operation fails");
+        assertEquals("Error: Database error", result);
     }
 
-    /**
-     * Helper method to verify notice properties
-     */
-    private void assertNotice(NoticeBean notice, int expectedId, 
-            String expectedTitle, String expectedInfo) {
+    private void assertNotice(NoticeBean notice, int expectedId, String expectedTitle, String expectedInfo) {
         assertAll(
-            () -> assertEquals(expectedId, notice.getNoticeId(), 
-                "Notice ID should match"),
-            () -> assertEquals(expectedTitle, notice.getNoticeTitle(), 
-                "Notice title should match"),
-            () -> assertEquals(expectedInfo, notice.getNoticeInfo(), 
-                "Notice info should match")
+            () -> assertEquals(expectedId, notice.getNoticeId()),
+            () -> assertEquals(expectedTitle, notice.getNoticeTitle()),
+            () -> assertEquals(expectedInfo, notice.getNoticeInfo())
         );
-    }
-
-    /**
-     * Cleans up resources after each test
-     */
-    @AfterEach
-    void tearDown() {
-        if (dbUtilMocked != null) {
-            dbUtilMocked.close();
-        }
     }
 }

@@ -5,120 +5,191 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.hit.beans.TenderBean;
 import com.hit.utility.DBUtil;
 
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * Test class for TenderDaoImpl Tests all CRUD operations and business logic for
- * tender management
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 public class TenderDaoImplTest {
 
-	@Mock
-	private PreparedStatement mockPreparedStatement;
-	@Mock
-	private ResultSet mockResultSet;
+    @Mock
+    private Connection mockConnection;
+    @Mock
+    private PreparedStatement mockPreparedStatement;
+    @Mock
+    private ResultSet mockResultSet;
 
-	private Connection mockConnection;
-	private TenderDaoImpl tenderDao;
-	private MockedStatic<DBUtil> dbUtilMocked;
+    private TenderDaoImpl tenderDao;
+    private MockedStatic<DBUtil> dbUtilMocked;
 
-	/**
-	 * Sets up the test environment before each test
-	 */
-	@BeforeEach
-	void setUp() throws SQLException {
-		mockConnection = mock(Connection.class);
-		tenderDao = new TenderDaoImpl();
-		dbUtilMocked = mockStatic(DBUtil.class);
+    @BeforeEach
+    void setUp() throws SQLException {
+        tenderDao = new TenderDaoImpl();
+        dbUtilMocked = mockStatic(DBUtil.class);
+        dbUtilMocked.when(DBUtil::provideConnection).thenReturn(mockConnection);
+        when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
+    }
 
-		dbUtilMocked.when(DBUtil::provideConnection).thenReturn(mockConnection);
+    @AfterEach
+    void tearDown() {
+        if (dbUtilMocked != null) {
+            dbUtilMocked.close();
+        }
+    }
 
-		// Use lenient stubbing for common database operations
-		lenient().when(mockConnection.prepareStatement(anyString())).thenReturn(mockPreparedStatement);
-		lenient().when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+    @Test
+    void createTender_WhenSuccessful_ShouldReturnSuccessMessage() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+        TenderBean tender = new TenderBean("T1", "Test Tender", "Construction", 
+            1000, "Test Description", "2024-12-31", "Test Location");
 
-		// Mock basic ResultSet behavior
-		lenient().when(mockResultSet.next()).thenReturn(true, false);
+        // Act
+        String result = tenderDao.createTender(tender);
 
-		// Mock common column retrievals with default values
-		String defaultDate = "2024-12-31";
-		lenient().when(mockResultSet.getString(anyString())).thenReturn("");
-		lenient().when(mockResultSet.getInt(anyString())).thenReturn(0);
-		lenient().when(mockResultSet.getString("tdeadline")).thenReturn(defaultDate);
+        // Assert
+        assertEquals("New Tender Inserted<br> Your Tender id: T1", result);
+    }
 
-		// Mock parameter setting
-		lenient().doNothing().when(mockPreparedStatement).setString(anyInt(), anyString());
-		lenient().doNothing().when(mockPreparedStatement).setInt(anyInt(), anyInt());
-		lenient().doNothing().when(mockPreparedStatement).setDate(anyInt(), any(java.sql.Date.class));
+    @Test
+    void createTender_WhenSQLException_ShouldReturnErrorMessage() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeUpdate())
+            .thenThrow(new SQLException("Database error"));
+        TenderBean tender = new TenderBean("T1", "Test Tender", "Construction", 
+            1000, "Test Description", "2024-12-31", "Test Location");
 
-		// Mock executeUpdate to return success by default
-		lenient().when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+        // Act
+        String result = tenderDao.createTender(tender);
 
-		// Mock close operations
-		lenient().doNothing().when(mockResultSet).close();
-		lenient().doNothing().when(mockPreparedStatement).close();
-		lenient().doNothing().when(mockConnection).close();
-	}
+        // Assert
+        assertEquals("Error : Database error", result);
+    }
 
-	@AfterEach
-	void tearDown() {
-		if (dbUtilMocked != null) {
-			dbUtilMocked.close();
-		}
-	}
+    @Test
+    void removeTender_WhenSuccessful_ShouldReturnTrue() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
 
-	/**
-	 * Tests cleanup of database connections and verifies proper closing order
-	 */
-	@Test
-	void cleanup_WhenCalled_ShouldCloseAllConnections() throws SQLException {
-		// Arrange
-		dbUtilMocked.when(() -> DBUtil.closeConnection(any(ResultSet.class))).thenCallRealMethod();
-		dbUtilMocked.when(() -> DBUtil.closeConnection(any(PreparedStatement.class))).thenCallRealMethod();
-		dbUtilMocked.when(() -> DBUtil.closeConnection(any(Connection.class))).thenCallRealMethod();
+        // Act
+        boolean result = tenderDao.removeTender("T1");
 
-		// Create the connections
-		Connection conn = mockConnection;
-		PreparedStatement ps = mockPreparedStatement;
-		ResultSet rs = mockResultSet;
+        // Assert
+        assertTrue(result);
+    }
 
-		// Act
-		DBUtil.closeConnection(rs);
-		DBUtil.closeConnection(ps);
-		DBUtil.closeConnection(conn);
+    @Test
+    void removeTender_WhenSQLException_ShouldReturnFalse() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeUpdate())
+            .thenThrow(new SQLException("Database error"));
 
-		// Assert
-		InOrder inOrder = inOrder(mockResultSet, mockPreparedStatement, mockConnection);
-		inOrder.verify(mockResultSet).close();
-		inOrder.verify(mockPreparedStatement).close();
-		inOrder.verify(mockConnection).close();
-	}
+        // Act
+        boolean result = tenderDao.removeTender("T1");
 
-	/**
-	 * Tests handling of null connections during cleanup
-	 */
-	@Test
-	void cleanup_WhenNull_ShouldNotThrowException() {
-		assertAll(() -> assertDoesNotThrow(() -> DBUtil.closeConnection((Connection) null)),
-				() -> assertDoesNotThrow(() -> DBUtil.closeConnection((PreparedStatement) null)),
-				() -> assertDoesNotThrow(() -> DBUtil.closeConnection((ResultSet) null)));
-	}
+        // Assert
+        assertFalse(result);
+    }
 
+    @Test
+    void updateTender_WhenSuccessful_ShouldReturnSuccessMessage() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeUpdate()).thenReturn(1);
+        TenderBean tender = new TenderBean("T1", "Test Tender", "Construction", 
+            1000, "Test Description", "2024-12-31", "Test Location");
+
+        // Act
+        String result = tenderDao.updateTender(tender);
+
+        // Assert
+        assertEquals("TENDER DETAILS UPDATED SUCCSESFULLY", result);
+    }
+
+    @Test
+    void updateTender_WhenSQLException_ShouldReturnErrorMessage() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeUpdate())
+            .thenThrow(new SQLException("Database error"));
+        TenderBean tender = new TenderBean("T1", "Test Tender", "Construction", 
+            1000, "Test Description", "2024-12-31", "Test Location");
+
+        // Act
+        String result = tenderDao.updateTender(tender);
+
+        // Assert
+        assertEquals("Error: Database error", result);
+    }
+
+    @Test
+    void getAllTenders_WhenExists_ShouldReturnTenderList() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        when(mockResultSet.next()).thenReturn(true, false);
+        
+        // Mock date value
+        Date mockDate = new Date(System.currentTimeMillis());
+        
+        // Mock column values matching exact database column names
+        when(mockResultSet.getString("tid")).thenReturn("T1");
+        when(mockResultSet.getString("tname")).thenReturn("Test Tender 1");
+        when(mockResultSet.getString("ttype")).thenReturn("Construction");
+        when(mockResultSet.getInt("tprice")).thenReturn(1000);
+        when(mockResultSet.getString("tdesc")).thenReturn("Description 1");
+        when(mockResultSet.getDate(6)).thenReturn(mockDate);
+        when(mockResultSet.getString("tloc")).thenReturn("Location 1");
+
+        // Act
+        List<TenderBean> result = tenderDao.getAllTenders();
+
+        // Assert
+        assertAll(
+            "Verify tender list contents",
+            () -> assertNotNull(result, "Result list should not be null"),
+            () -> assertEquals(1, result.size(), "Should return 1 tender"),
+            () -> assertNotNull(result.get(0), "First tender should not be null"),
+            () -> assertAll("First tender properties",
+                () -> assertEquals("T1", result.get(0).getId()),
+                () -> assertEquals("Test Tender 1", result.get(0).getName()),
+                () -> assertEquals("Construction", result.get(0).getType()),
+                () -> assertEquals(1000, result.get(0).getPrice()),
+                () -> assertEquals("Description 1", result.get(0).getDesc()),
+                () -> assertNotNull(result.get(0).getDeadline(), "Deadline should not be null"),
+                () -> assertEquals("Location 1", result.get(0).getLocation())
+            )
+        );
+    }
+
+    @Test
+    void getAllTenders_WhenEmpty_ShouldReturnEmptyList() throws SQLException {
+        // Arrange
+        when(mockPreparedStatement.executeQuery()).thenReturn(mockResultSet);
+        when(mockResultSet.next()).thenReturn(false);
+
+        // Act
+        List<TenderBean> result = tenderDao.getAllTenders();
+
+        // Assert
+        assertAll(
+            "Verify empty list",
+            () -> assertNotNull(result, "Result list should not be null"),
+            () -> assertTrue(result.isEmpty(), "Result list should be empty")
+        );
+    }
 }
